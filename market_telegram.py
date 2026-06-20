@@ -82,9 +82,9 @@ def buscar_di_futuro():
         resultado["DI Jan/2032"] = "N/A"
     return resultado
 
-def buscar_rss(url, fonte, max_items=5):
+def buscar_rss(url, fonte, max_items=4):
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         resp = requests.get(url, timeout=10, headers=headers)
         root = ET.fromstring(resp.content)
         itens = []
@@ -101,19 +101,18 @@ def buscar_noticias():
     todas = []
 
     feeds = [
-        ("https://feeds.reuters.com/reuters/businessNews", "Reuters"),
-        ("https://feeds.reuters.com/reuters/technologyNews", "Reuters Tech"),
-        ("https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", "NYT"),
+        ("https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", "NYT Business"),
         ("https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "NYT Tech"),
-        ("https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "WSJ Markets"),
-        ("https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml", "WSJ Business"),
+        ("https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", "NYT Economy"),
+        ("https://feeds.bbci.co.uk/news/business/rss.xml", "BBC Business"),
+        ("https://feeds.bbci.co.uk/news/technology/rss.xml", "BBC Tech"),
+        ("https://www.ft.com/rss/home", "Financial Times"),
         ("https://www.infomoney.com.br/feed/", "InfoMoney"),
-        ("https://valoreconomico.com.br/rss", "Valor Econômico"),
-        ("https://www.estadao.com.br/rss/economia.xml", "Estadão"),
+        ("https://braziljournal.com/feed/", "Brazil Journal"),
     ]
 
     for url, fonte in feeds:
-        itens = buscar_rss(url, fonte, max_items=5)
+        itens = buscar_rss(url, fonte, max_items=4)
         todas.extend(itens)
 
     selecionadas = []
