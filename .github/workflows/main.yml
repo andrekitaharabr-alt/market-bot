@@ -1,0 +1,19 @@
+name: Market Bot
+
+on:
+  schedule:
+    - cron: '0 11 * * 1-5'
+    - cron: '0 16 * * 1-5'
+    - cron: '0 21 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install yfinance requests
+      - run: python market_telegram.py
