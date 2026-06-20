@@ -104,11 +104,13 @@ def buscar_noticias():
         ("https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", "NYT Business"),
         ("https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "NYT Tech"),
         ("https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml", "NYT Economy"),
+        ("https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml", "NYT Politics"),
         ("https://feeds.bbci.co.uk/news/business/rss.xml", "BBC Business"),
         ("https://feeds.bbci.co.uk/news/technology/rss.xml", "BBC Tech"),
-        ("https://www.ft.com/rss/home", "Financial Times"),
-        ("https://www.infomoney.com.br/feed/", "InfoMoney"),
         ("https://braziljournal.com/feed/", "Brazil Journal"),
+        ("https://www.infomoney.com.br/feed/", "InfoMoney"),
+        ("https://apnews.com/rss/business", "AP Business"),
+        ("https://apnews.com/rss/technology", "AP Tech"),
     ]
 
     for url, fonte in feeds:
