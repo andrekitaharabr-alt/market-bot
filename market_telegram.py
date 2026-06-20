@@ -1,12 +1,12 @@
 import requests
 import yfinance as yf
 from datetime import datetime
+import xml.etree.ElementTree as ET
 import warnings
 warnings.filterwarnings("ignore")
 
 TOKEN = "8698745900:AAGZewCYxXRMxWU4uQEQtbEP20oYuEkcRYA"
 CHAT_ID = "7580899579"
-NEWS_API_KEY = "b9d7506c5f814e08a770dc512c389b5b"
 
 _noticias_enviadas = set()
 
@@ -82,43 +82,43 @@ def buscar_di_futuro():
         resultado["DI Jan/2032"] = "N/A"
     return resultado
 
+def buscar_rss(url, fonte, max_items=5):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, timeout=10, headers=headers)
+        root = ET.fromstring(resp.content)
+        itens = []
+        for item in root.findall(".//item")[:max_items]:
+            titulo = item.findtext("title", "").strip()
+            if titulo and "[Removed]" not in titulo:
+                itens.append({"titulo": titulo, "fonte": fonte})
+        return itens
+    except:
+        return []
+
 def buscar_noticias():
     global _noticias_enviadas
-    noticias = []
-    try:
-        url = (
-            f"https://newsapi.org/v2/everything?"
-            f"q=market+economy+credit+technology+politics+Fed+rates&"
-            f"sources=bloomberg,reuters,associated-press,the-wall-street-journal,the-new-york-times&"
-            f"language=en&sortBy=publishedAt&pageSize=30&"
-            f"apiKey={NEWS_API_KEY}"
-        )
-        data = requests.get(url, timeout=10).json()
-        for a in data.get("articles", []):
-            titulo = a.get("title", "")
-            fonte = a.get("source", {}).get("name", "")
-            if titulo and titulo not in _noticias_enviadas and "[Removed]" not in titulo:
-                noticias.append({"titulo": titulo, "fonte": fonte})
-    except:
-        pass
-    try:
-        url_br = (
-            f"https://newsapi.org/v2/everything?"
-            f"q=mercado+economia+credito+juros+inflacao+politica+tecnologia&"
-            f"language=pt&sortBy=publishedAt&pageSize=20&"
-            f"apiKey={NEWS_API_KEY}"
-        )
-        data_br = requests.get(url_br, timeout=10).json()
-        for a in data_br.get("articles", []):
-            titulo = a.get("title", "")
-            fonte = a.get("source", {}).get("name", "")
-            if titulo and titulo not in _noticias_enviadas and "[Removed]" not in titulo:
-                noticias.append({"titulo": titulo, "fonte": fonte})
-    except:
-        pass
+    todas = []
+
+    feeds = [
+        ("https://feeds.reuters.com/reuters/businessNews", "Reuters"),
+        ("https://feeds.reuters.com/reuters/technologyNews", "Reuters Tech"),
+        ("https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", "NYT"),
+        ("https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "NYT Tech"),
+        ("https://feeds.a.dj.com/rss/RSSMarketsMain.xml", "WSJ Markets"),
+        ("https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml", "WSJ Business"),
+        ("https://www.infomoney.com.br/feed/", "InfoMoney"),
+        ("https://valoreconomico.com.br/rss", "Valor Econômico"),
+        ("https://www.estadao.com.br/rss/economia.xml", "Estadão"),
+    ]
+
+    for url, fonte in feeds:
+        itens = buscar_rss(url, fonte, max_items=5)
+        todas.extend(itens)
+
     selecionadas = []
-    for n in noticias:
-        if n["titulo"] not in _noticias_enviadas and len(selecionadas) < 8:
+    for n in todas:
+        if n["titulo"] not in _noticias_enviadas and len(selecionadas) < 10:
             selecionadas.append(n)
             _noticias_enviadas.add(n["titulo"])
     return selecionadas
@@ -204,7 +204,7 @@ def montar_mensagem():
     else:
         L.append("  Noticias indisponíveis no momento")
 
-    L.append("\nFonte: Yahoo Finance, Banco Central, Tesouro Direto & NewsAPI")
+    L.append("\nFonte: Yahoo Finance, Banco Central, Tesouro Direto & RSS")
     return "\n".join(L)
 
 def enviar():
