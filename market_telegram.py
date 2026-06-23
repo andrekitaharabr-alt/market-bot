@@ -3,6 +3,7 @@ import yfinance as yf
 from datetime import datetime
 import pytz
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -55,34 +56,64 @@ def buscar_selic():
     except:
         return "N/A"
 
+def buscar_di_futuro():
+    resultado = {}
+    contratos = [
+        ("DI1F28", "DI Jan/2028"),
+        ("DI1F30", "DI Jan/2030"),
+        ("DI1F32", "DI Jan/2032"),
+    ]
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    for codigo, nome in contratos:
+        try:
+            url = f"https://br.advfn.com/bolsa-de-valores/bmf/{codigo}/cotacao"
+            resp = requests.get(url, timeout=10, headers=headers)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            preco = None
+            for tag in soup.find_all(["span", "div", "td"]):
+                texto = tag.get_text(strip=True).replace(",", ".")
+                try:
+                    val = float(texto)
+                    if 8 < val < 25:
+                        preco = val
+                        break
+                except:
+                    continue
+            resultado[nome] = f"{preco:.3f}% a.a." if preco else "N/A"
+        except:
+            resultado[nome] = "N/A"
+    return resultado
+
 def buscar_tesouro():
     resultado = {}
     try:
-        url = "https://www.tesourodireto.com.br/json/br/com/b3/tesourodireto/model/dto/TesouroDiretoDTO.json"
-        data = requests.get(url, timeout=10).json()
-        titulos = data["response"]["TrsrBdTradgList"]
-        for t in titulos:
-            nome = t["TrsrBd"]["nm"]
-            taxa = t["TrsrBd"]["anulInvstmtRate"]
-            venc = t["TrsrBd"]["mtrtyDt"][:10]
-            if "IPCA+" in nome:
-                resultado[f"NTN-B {venc}"] = f"{taxa:.2f}%"
+        url = "https://www.anbima.com.br/pt_br/informar/taxas-de-titulos-publicos.htm"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        resp = requests.get(url, timeout=15, headers=headers)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for row in soup.find_all("tr"):
+            cols = row.find_all("td")
+            if len(cols) >= 3:
+                nome = cols[0].get_text(strip=True)
+                taxa = cols[2].get_text(strip=True)
+                if "NTN-B" in nome and taxa:
+                    resultado[nome] = taxa
     except:
         pass
-    return resultado
-
-def buscar_di_futuro():
-    resultado = {}
-    try:
-        selic_url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
-        selic = float(requests.get(selic_url, timeout=10).json()[0]["valor"])
-        resultado["DI Jan/2028"] = f"~{selic + 0.8:.2f}% a.a."
-        resultado["DI Jan/2030"] = f"~{selic + 1.2:.2f}% a.a."
-        resultado["DI Jan/2032"] = f"~{selic + 1.5:.2f}% a.a."
-    except:
-        resultado["DI Jan/2028"] = "N/A"
-        resultado["DI Jan/2030"] = "N/A"
-        resultado["DI Jan/2032"] = "N/A"
+    if not resultado:
+        try:
+            url = "https://www.tesourodireto.com.br/json/br/com/b3/tesourodireto/model/dto/TesouroDiretoDTO.json"
+            headers = {"User-Agent": "Mozilla/5.0"}
+            data = requests.get(url, timeout=10, headers=headers).json()
+            titulos = data["response"]["TrsrBdTradgList"]
+            for t in titulos:
+                nome = t["TrsrBd"]["nm"]
+                taxa = t["TrsrBd"]["anulInvstmtRate"]
+                venc = t["TrsrBd"]["mtrtyDt"][:10]
+                if "IPCA+" in nome:
+                    resultado[f"NTN-B {venc}"] = f"{taxa:.2f}%"
+        except:
+            pass
     return resultado
 
 def buscar_rss(url, fonte, max_items=4):
@@ -93,17 +124,14 @@ def buscar_rss(url, fonte, max_items=4):
         itens = []
         for item in root.findall(".//item")[:max_items]:
             titulo = item.findtext("title", "").strip()
-            pub_date = item.findtext("pubDate", "").strip()
             if titulo and "[Removed]" not in titulo:
-                itens.append({"titulo": titulo, "fonte": fonte, "data": pub_date})
+                itens.append({"titulo": titulo, "fonte": fonte})
         return itens
     except:
         return []
 
 def buscar_noticias(periodo):
-    """Busca noticias diferentes por periodo do dia para evitar repeticao"""
     todas = []
-
     feeds = [
         ("https://rss.nytimes.com/services/xml/rss/nyt/Business.xml", "NYT Business"),
         ("https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", "NYT Tech"),
@@ -115,13 +143,10 @@ def buscar_noticias(periodo):
         ("https://apnews.com/rss/business", "AP Business"),
         ("https://apnews.com/rss/technology", "AP Tech"),
     ]
-
     for url, fonte in feeds:
         itens = buscar_rss(url, fonte, max_items=6)
         todas.extend(itens)
 
-    # Usa o periodo para pular noticias e evitar repeticao entre os 3 envios
-    # Manha: primeiras 8, Tarde: proximas 8, Noite: ultimas 8
     offset = {"manha": 0, "tarde": 8, "noite": 16}.get(periodo, 0)
     unicas = []
     vistos = set()
@@ -129,7 +154,6 @@ def buscar_noticias(periodo):
         if n["titulo"] not in vistos:
             vistos.add(n["titulo"])
             unicas.append(n)
-
     return unicas[offset:offset+8]
 
 def montar_mensagem():
@@ -218,7 +242,7 @@ def montar_mensagem():
     else:
         L.append("  Noticias indisponíveis no momento")
 
-    L.append("\nFonte: Yahoo Finance, Banco Central, Tesouro Direto & RSS")
+    L.append("\nFonte: Yahoo Finance, Banco Central, ANBIMA, ADVFN & RSS")
     return "\n".join(L)
 
 def enviar():
