@@ -1,6 +1,7 @@
 import requests
 import yfinance as yf
 from datetime import datetime
+import pytz
 import xml.etree.ElementTree as ET
 import warnings
 warnings.filterwarnings("ignore")
@@ -8,7 +9,9 @@ warnings.filterwarnings("ignore")
 TOKEN = "8698745900:AAGZewCYxXRMxWU4uQEQtbEP20oYuEkcRYA"
 CHAT_ID = "7580899579"
 
-_noticias_enviadas = set()
+def horario_brasilia():
+    tz = pytz.timezone("America/Sao_Paulo")
+    return datetime.now(tz)
 
 def formatar_variacao(val):
     if val is None:
@@ -19,7 +22,7 @@ def formatar_variacao(val):
 def buscar_dado(ticker, nome):
     try:
         t = yf.Ticker(ticker)
-        hist = t.history(period="2d")
+        hist = t.history(period="5d", interval="1d")
         if len(hist) >= 2:
             anterior = float(hist["Close"].iloc[-2])
             atual = float(hist["Close"].iloc[-1])
@@ -90,14 +93,15 @@ def buscar_rss(url, fonte, max_items=4):
         itens = []
         for item in root.findall(".//item")[:max_items]:
             titulo = item.findtext("title", "").strip()
+            pub_date = item.findtext("pubDate", "").strip()
             if titulo and "[Removed]" not in titulo:
-                itens.append({"titulo": titulo, "fonte": fonte})
+                itens.append({"titulo": titulo, "fonte": fonte, "data": pub_date})
         return itens
     except:
         return []
 
-def buscar_noticias():
-    global _noticias_enviadas
+def buscar_noticias(periodo):
+    """Busca noticias diferentes por periodo do dia para evitar repeticao"""
     todas = []
 
     feeds = [
@@ -108,33 +112,42 @@ def buscar_noticias():
         ("https://feeds.bbci.co.uk/news/business/rss.xml", "BBC Business"),
         ("https://feeds.bbci.co.uk/news/technology/rss.xml", "BBC Tech"),
         ("https://braziljournal.com/feed/", "Brazil Journal"),
-        ("https://www.infomoney.com.br/feed/", "InfoMoney"),
         ("https://apnews.com/rss/business", "AP Business"),
         ("https://apnews.com/rss/technology", "AP Tech"),
     ]
 
     for url, fonte in feeds:
-        itens = buscar_rss(url, fonte, max_items=4)
+        itens = buscar_rss(url, fonte, max_items=6)
         todas.extend(itens)
 
-    selecionadas = []
+    # Usa o periodo para pular noticias e evitar repeticao entre os 3 envios
+    # Manha: primeiras 8, Tarde: proximas 8, Noite: ultimas 8
+    offset = {"manha": 0, "tarde": 8, "noite": 16}.get(periodo, 0)
+    unicas = []
+    vistos = set()
     for n in todas:
-        if n["titulo"] not in _noticias_enviadas and len(selecionadas) < 10:
-            selecionadas.append(n)
-            _noticias_enviadas.add(n["titulo"])
-    return selecionadas
+        if n["titulo"] not in vistos:
+            vistos.add(n["titulo"])
+            unicas.append(n)
+
+    return unicas[offset:offset+8]
 
 def montar_mensagem():
-    agora = datetime.now().strftime("%d/%m/%Y %H:%M")
-    hora = datetime.now().hour
-    if hora < 12:
-        periodo = "🌅 BOM DIA"
-    elif hora < 17:
-        periodo = "☀️ BOA TARDE"
-    else:
-        periodo = "🌙 BOA NOITE"
+    agora = horario_brasilia()
+    hora = agora.hour
+    data_str = agora.strftime("%d/%m/%Y %H:%M")
 
-    L = [f"📊 {periodo} — RESUMO DE MERCADO", f"🕐 {agora}", ""]
+    if hora < 12:
+        periodo = "manha"
+        periodo_label = "🌅 BOM DIA"
+    elif hora < 17:
+        periodo = "tarde"
+        periodo_label = "☀️ BOA TARDE"
+    else:
+        periodo = "noite"
+        periodo_label = "🌙 BOA NOITE"
+
+    L = [f"📊 {periodo_label} — RESUMO DE MERCADO", f"🕐 {data_str} (Brasília)", ""]
 
     L.append("🇧🇷 BRASIL (B3)")
     for tk, nm in [("^BVSP","Ibovespa"),("PETR4.SA","Petrobras PN"),("VALE3.SA","Vale ON"),
@@ -198,7 +211,7 @@ def montar_mensagem():
         L.append(f"  {nm}: {p}  {formatar_variacao(d['variacao'])}")
 
     L.append("\n📰 MANCHETES DO MOMENTO")
-    noticias = buscar_noticias()
+    noticias = buscar_noticias(periodo)
     if noticias:
         for n in noticias:
             L.append(f"  • [{n['fonte']}] {n['titulo']}")
@@ -209,7 +222,7 @@ def montar_mensagem():
     return "\n".join(L)
 
 def enviar():
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Coletando dados...")
+    print(f"Coletando dados...")
     msg = montar_mensagem()
     if len(msg) > 4096:
         partes = [msg[i:i+4096] for i in range(0, len(msg), 4096)]
@@ -219,7 +232,7 @@ def enviar():
     for parte in partes:
         resp = requests.post(url, json={"chat_id": CHAT_ID, "text": parte})
         if resp.status_code == 200:
-            print("✅ Mensagem enviada!")
+            print("✅ Enviado!")
         else:
             print(f"Erro: {resp.text}")
 
