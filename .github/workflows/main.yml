@@ -15,5 +15,5 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - run: pip install yfinance requests
+      - run: pip install yfinance requests pytz
       - run: python market_telegram.py
